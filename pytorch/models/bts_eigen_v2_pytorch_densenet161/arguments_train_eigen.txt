@@ -1,0 +1,21 @@
+--mode train
+--model_name bts_eigen_v2_pytorch_densenet161
+--encoder densenet161_bts
+--dataset kitti
+--data_path ../../dataset/kitti_dataset/
+--gt_path ../../dataset/kitti_dataset/data_depth_annotated/
+--filenames_file ../train_test_inputs/eigen_train_files_with_gt.txt
+--batch_size 16
+--num_epochs 50
+--learning_rate 1.414e-4
+--weight_decay 1e-2
+--num_gpus 4
+--num_threads 2
+--input_height 352
+--input_width 704
+--max_depth 80
+--do_kb_crop
+--do_random_rotate
+--degree 1.0
+--log_directory ./models/
+--multiprocessing_distributed
