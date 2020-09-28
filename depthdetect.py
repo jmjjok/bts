@@ -183,7 +183,6 @@ class Depthdetect():
             pred_4x4 = pred_4x4s[0]
             pred_2x2 = pred_2x2s[0]
             pred_1x1 = pred_1x1s[0]
-            print(pred_depth)
             if dataset == 'kitti' or dataset == 'kitti_benchmark':
                 pred_depth_scaled = pred_depth * 256.0
             else:
