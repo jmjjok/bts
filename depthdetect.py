@@ -39,8 +39,17 @@ class Depthdetect():
         self. parser.add_argument('--do_kb   _crop', help='if set, crop input images as kitti benchmark images',
                             action='store_true')
         self.parser.add_argument('--save_lpg', help='if set, save outputs from lpg layers', action='store_true')
-        self. parser.add_argument('--bts_size', type=int, help='initial num_filters in bts', default=512)
+        self.parser.add_argument('--bts_size', type=int, help='initial num_filters in bts', default=512)
         self.args = self.parser.parse_args()
+	        self.args.mode = 'test'
+        self.model = BtsModel(params = self.args)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
+        self.model = torch.nn.DataParallel(self.model,device_ids=[0])
+        checkpoint = torch.load(self.args.checkpoint_path)
+        self.model.load_state_dict(checkpoint['model'])
+        self.model.eval()
+        self.model.cuda()
+
         # exec("param=" + sys.argv[1])
         # self.dict = {"model_name":}
     def get_num_lines(file_path):
@@ -53,16 +62,7 @@ class Depthdetect():
         dataset = "kitti"
 
         """Test function."""
-        self.args.mode = 'test'
-        a = os.getcwd()
-        model = BtsModel(params=self.args)
-        # os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
-        model = torch.nn.DataParallel(model,device_ids=[0])
-
-        checkpoint = torch.load(self.args.checkpoint_path)
-        model.load_state_dict(checkpoint['model'])
-        model.eval()
-        model.cuda()
+     
 
         # # num_test_samples = len(os.listdir(args.data_path))#########
         # ds_lines = os.listdir(args.data_path)
@@ -90,17 +90,10 @@ class Depthdetect():
         with torch.no_grad():
             for _, sample in enumerate(dataloader.data):
                 # print(sample['image'])
-                a = sample['image'].shape
                 image = Variable(sample['image'].cuda())
                 focal = Variable(sample['focal'].cuda())
                 # Predict
-                lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est = model(image, focal)
-                print("**********")
-                print(lpg8x8)
-                print("**********")
-                print(lpg4x4)
-                print("**********")
-                print("**********")
+                lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est =self.model(image, focal)
                 pred_depths.append(depth_est.cpu().numpy().squeeze())
                 pred_8x8s.append(lpg8x8[0].cpu().numpy().squeeze())
                 pred_4x4s.append(lpg4x4[0].cpu().numpy().squeeze())
@@ -207,31 +200,8 @@ class Depthdetect():
             #             plt.imsave(filename_lpg_cmap_png, np.log10(pred_2x2), cmap='Greys')
             #             filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_1x1.png')
             #             plt.imsave(filename_lpg_cmap_png, np.log10(pred_1x1), cmap='Greys')
-            # args.data_path = '/home/jiamingjie/python_program/amap_traffic_final_train_data'
-
+            # args.data_path = '/home/jiamingjie/python_program/amap_t
         return pred_depth_scaled
-
-# def convert_arg_line_to_args(arg_line):
-#     for arg in arg_line.split():
-#         if not arg.strip():
-#             continue
-#         yield arg
-#
-
-#
-# if sys.argv.__len__() == 2:
-#     arg_filename_with_prefix = '@' + sys.argv[1]
-#     args = parser.parse_args([arg_filename_with_prefix])
-# else:
-#     args = parser.parse_args()
-#
-# model_dir = os.path.dirname(args.checkpoint_path)
-# sys.path.append(model_dir)
-#
-# for key, val in vars(__import__(args.model_name)).items():
-#     if key.startswith('__') and key.endswith('__'):
-#         continue
-#     vars()[key] = val
 
 
 
