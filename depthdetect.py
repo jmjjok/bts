@@ -10,41 +10,56 @@ import sys
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from lib.bts.pytorch.bts_dataloader import *
-from lib.bts.pytorch.models.bts_eigen_v2_pytorch_densenet161.bts_eigen_v2_pytorch_densenet161 import *
-from lib.bts.pytorch.models.bts_eigen_v2_pytorch_densenet161 import *
+from lib.bts.pytorch.bts_dataloader import BtsDataLoader, ToTensor
+from lib.bts.pytorch.models.bts_eigen_v2_pytorch_densenet161\
+        .bts_eigen_v2_pytorch_densenet161 import BtsModel
 import errno
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from lib.bts.pytorch.bts_dataloader import *
 class Depthdetect():
+
     def __init__(self,**kwargs):
 
-        self.parser = argparse.ArgumentParser(description='BTS PyTorch implementation.', fromfile_prefix_chars='@')
+        self.parser = argparse.ArgumentParser(
+            description='BTS PyTorch implementation.',
+            fromfile_prefix_chars='@')
         # parser.convert_arg_line_to_args = convert_arg_line_to_args
-        self.parser.add_argument('--model_name', type=str, help='model name', default='bts_eigen_v2_pytorch_densenet161')
-        self.parser.add_argument('--encoder', type=str, help='type of encoder, vgg or desenet121_bts or densenet161_bts',
-                            default='densenet161_bts')
-        self. parser.add_argument('--data_path', type=str, help='path to the data',
-                            default='/home/jiamingjie/python_program/amap_traffic_final_train_data')  # 数据集的data路径
-        self. parser.add_argument('--filenames_file', type=str, help='path to the filenames text file',
-                            default="../train_test_inputs/eigen_test_files_with_gt.txt")
-        self.parser.add_argument('--input_height', type=int, help='input height', default=768)
-        self. parser.add_argument('--input_width', type=int, help='input width', default=1216)
-        self. parser.add_argument('--max_depth', type=float, help='maximum depth in estimation', default=100)
-        self.parser.add_argument('--checkpoint_path', type=str, help='path to a specific checkpoint to load',
-                            default='./lib/bts/pytorch/models/bts_eigen_v2_pytorch_densenet161/model')
-        self. parser.add_argument('--dataset', type=str, help='dataset to train on, make3d or nyudepthv2', default='kitti')
-        self. parser.add_argument('--do_kb   _crop', help='if set, crop input images as kitti benchmark images',
-                            action='store_true')
-        self.parser.add_argument('--save_lpg', help='if set, save outputs from lpg layers', action='store_true')
-        self.parser.add_argument('--bts_size', type=int, help='initial num_filters in bts', default=512)
+        self.parser.add_argument('--model_name', type=str, help='model name',
+            default='bts_eigen_v2_pytorch_densenet161')
+        self.parser.add_argument('--encoder', type=str,
+            help='type of encoder, vgg or desenet121_bts or densenet161_bts',
+            default='densenet161_bts')
+        self. parser.add_argument('--data_path', type=str,
+            help='path to the data', default='/home/jiamingjie/python_program/'
+            'amap_traffic_final_train_data')  # 数据集的data路径
+        self.parser.add_argument('--filenames_file', type=str,
+            help='path to the filenames text file',
+            default="../train_test_inputs/eigen_test_files_with_gt.txt")
+        self.parser.add_argument('--input_height', type=int,
+            help='input height', default=768)
+        self.parser.add_argument('--input_width', type=int,
+            help='input width', default=1216)
+        self.parser.add_argument('--max_depth', type=float,
+            help='maximum depth in estimation', default=100)
+        self.parser.add_argument('--checkpoint_path', type=str,
+            help='path to a specific checkpoint to load',
+            default='./lib/bts/pytorch/models/bts_eigen_v2_pytorch_densenet'
+                    '161/model')
+        self.parser.add_argument('--dataset', type=str,
+            help='dataset to train on, make3d or nyudepthv2', default='kitti')
+        self.parser.add_argument('--do_kb_crop',
+            help='if set, crop input images as kitti benchmark images',
+            action='store_true')
+        self.parser.add_argument('--save_lpg', 
+            help='if set, save outputs from lpg layers', action='store_true')
+        self.parser.add_argument('--bts_size', type=int,
+            help='initial num_filters in bts', default=512)
         self.args = self.parser.parse_args()
-	        self.args.mode = 'test'
+        self.args.mode = 'test'
         self.model = BtsModel(params = self.args)
+        self.model = torch.nn.DataParallel(self.model, device_ids=[0])
         # os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
-        self.model = torch.nn.DataParallel(self.model,device_ids=[0])
         checkpoint = torch.load(self.args.checkpoint_path)
         self.model.load_state_dict(checkpoint['model'])
         self.model.eval()
@@ -52,6 +67,7 @@ class Depthdetect():
 
         # exec("param=" + sys.argv[1])
         # self.dict = {"model_name":}
+
     def get_num_lines(file_path):
         f = open(file_path, 'r')
         lines = f.readlines()
@@ -77,7 +93,11 @@ class Depthdetect():
         #     print('now testing {} files with {}'.format(num_test_samples, args.checkpoint_path))
         # args.data_path = args.data_path+'/'+i
         # num_test_samples = len(os.listdir(args.data_path))
-        dataloader = BtsDataLoader(image,self.args, 'test')
+        focal = 721.5377
+        image = cv2.resize(image, (1216,768)).astype(np.float32) / 255.0
+        sample = {'image': image, 'focal': torch.tensor(focal)}
+        sample = ToTensor('test')(sample)
+
         # lines = os.listdir(args.data_path)
         # print('now testing {} files with {}'.format(num_test_samples, args.checkpoint_path))
         pred_depths = []
@@ -88,17 +108,17 @@ class Depthdetect():
             #
             # start_time = time.time()
         with torch.no_grad():
-            for _, sample in enumerate(dataloader.data):
-                # print(sample['image'])
-                image = Variable(sample['image'].cuda())
-                focal = Variable(sample['focal'].cuda())
-                # Predict
-                lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est =self.model(image, focal)
-                pred_depths.append(depth_est.cpu().numpy().squeeze())
-                pred_8x8s.append(lpg8x8[0].cpu().numpy().squeeze())
-                pred_4x4s.append(lpg4x4[0].cpu().numpy().squeeze())
-                pred_2x2s.append(lpg2x2[0].cpu().numpy().squeeze())
-                pred_1x1s.append(reduc1x1[0].cpu().numpy().squeeze())
+            # print(sample['image'])
+            image = Variable(sample['image'].unsqueeze(0).cuda())
+            focal = Variable(sample['focal'].unsqueeze(0).cuda())
+            # Predict
+            lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est = \
+                self.model(image, focal)
+            pred_depths.append(depth_est.cpu().numpy().squeeze())
+            pred_8x8s.append(lpg8x8[0].cpu().numpy().squeeze())
+            pred_4x4s.append(lpg4x4[0].cpu().numpy().squeeze())
+            pred_2x2s.append(lpg2x2[0].cpu().numpy().squeeze())
+            pred_1x1s.append(reduc1x1[0].cpu().numpy().squeeze())
 
             # # elapsed_time = time.time() - start_time
             # print('Elapesed time: %s' % str(elapsed_time))
@@ -163,7 +183,6 @@ class Depthdetect():
             pred_4x4 = pred_4x4s[0]
             pred_2x2 = pred_2x2s[0]
             pred_1x1 = pred_1x1s[0]
-            print(pred_depth)
             if dataset == 'kitti' or dataset == 'kitti_benchmark':
                 pred_depth_scaled = pred_depth * 256.0
             else:
